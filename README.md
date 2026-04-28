@@ -19,6 +19,7 @@ tests/
   test_sm4.py             # 标准库 unittest 自动测试
 sm4_cpu_validation.py     # 生成本地样例并执行 CPU 基线验证
 sm4_gpu_validation.py     # 在 CUDA 服务器执行 CPU/GPU 对比验证
+sm4_gpu_direct_decrypt.py # 在 CUDA 服务器尝试直解外部真实密文
 main.py                   # 项目入口提示
 ```
 
@@ -64,6 +65,22 @@ python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cu
 2. CPU/GPU 解密吞吐量。
 3. GPU 相对 CPU 加速比。
 4. 原始文件、CPU 解密文件、GPU 解密文件的 sha256。
+
+## 运行真实密文 GPU 直解
+
+如果领导提供了真实密文、SM4 密钥和 IV，可以使用 `sm4_gpu_direct_decrypt.py` 在 CUDA 服务器上尝试解密。该脚本只调用 Torch/CUDA 版 SM4 实现，不使用 CPU 版 `cryptography` 解密函数。
+
+```bash
+python3 sm4_gpu_direct_decrypt.py \
+  --ciphertext '<完整密文字符串>' \
+  --key-hex '<32位hex密钥>' \
+  --iv-hex '<32位hex向量>' \
+  --mode AUTO \
+  --device cuda:2 \
+  --output-file validation_output/direct_plain.bin
+```
+
+`--mode AUTO` 会同时尝试 CBC 和 CTR。脚本会自动识别整体密文、`|` 分段、base64、hex，以及 ASN.1/DER 封装里的候选密文字段和 IV。
 
 ## 运行测试
 

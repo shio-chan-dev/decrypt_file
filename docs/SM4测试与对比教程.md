@@ -237,7 +237,80 @@ python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cu
 python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_100m
 ```
 
-## 八、如何写报告结论
+## 八、运行真实密文 GPU 直解
+
+如果领导提供的是一段真实密文、SM4 密钥和 IV，而不是让脚本自动生成测试文件，可以使用 `sm4_gpu_direct_decrypt.py`。
+
+这个脚本的定位是：在 CUDA 路径上尝试解开外部密文样例，确认真实样例能否被当前 GPU SM4 实现处理。它不会调用 CPU 版 `cryptography` 解密函数。
+
+### 1. 运行命令
+
+```bash
+python3 sm4_gpu_direct_decrypt.py \
+  --ciphertext '<完整密文字符串>' \
+  --key-hex '<32位hex密钥>' \
+  --iv-hex '<32位hex向量>' \
+  --mode AUTO \
+  --device cuda:2 \
+  --output-file validation_output/direct_plain.bin
+```
+
+参数说明：
+
+1. `--ciphertext`：外部提供的完整密文字符串。
+2. `--key-hex`：SM4 密钥，必须是 16 字节，也就是 32 位 hex。
+3. `--iv-hex`：SM4 IV/向量，必须是 16 字节，也就是 32 位 hex。
+4. `--mode`：可选 `AUTO`、`CBC`、`CTR`；不确定模式时使用 `AUTO`。
+5. `--device`：Torch CUDA 设备，例如 `cuda:0`、`cuda:1`、`cuda:2`。
+6. `--output-file`：如果出现可读 UTF-8 明文，把最后一个可读结果写入文件。
+
+### 2. 脚本会尝试什么
+
+真实业务密文可能不是“base64 解码后直接就是 SM4 密文字节”，也可能包含封装结构。脚本会自动尝试：
+
+1. 整体密文字符串。
+2. 使用 `|` 分隔后的每一段。
+3. base64 解码。
+4. hex 解码。
+5. ASN.1/DER 结构里的候选密文字段。
+6. 命令行传入 IV 和 ASN.1/DER 内部发现的 IV。
+
+### 3. 输出字段说明
+
+重点看以下字段：
+
+```text
+SM4 GPU直接解密：开始
+GPU设备：...
+密文候选数量：...
+向量候选数量：...
+测试模式：CBC,CTR
+
+解密模式：SM4-CBC
+解密状态：GPU算法执行成功
+成功密文候选：...
+成功IV来源：...
+成功IV(hex)：...
+明文长度(bytes)：...
+明文UTF-8：可解码
+明文内容预览：...
+```
+
+判断方式：
+
+1. 出现 `明文UTF-8：可解码`，并且内容符合业务预期，说明该候选组合基本可用。
+2. 只有 `GPU算法执行成功` 但 `明文UTF-8：无法解码`，说明算法执行没有报错，但该结果不一定是最终业务明文。
+3. 如果 CBC 报 `data length must be a multiple of 16 bytes`，说明当前候选密文字节长度不满足 CBC 分组要求。
+4. 如果所有候选都失败，通常需要继续确认加密模式、真实密文字段、IV 来源、padding 和密钥是否正确。
+
+### 4. CBC 和 CTR 的密文差异
+
+1. CBC 密文通常按 16 字节分组，带 PKCS7 padding 时密文长度一定是 16 的倍数。
+2. CTR 不需要 padding，密文长度通常和明文长度一致，不一定是 16 的倍数。
+3. 同一份明文、密钥和 IV，在 CBC 和 CTR 下得到的密文完全不同，不能混用模式解密。
+4. 如果密文外层是 ASN.1/DER、JSON 或其他业务封装，需要先找到里面真正的 SM4 密文字节。
+
+## 九、如何写报告结论
 
 报告中建议至少记录：
 
@@ -277,7 +350,19 @@ python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cu
 - GPU 相对 CPU 加速比：
 ```
 
-## 九、注意事项
+真实密文直解结果可以补充记录：
+
+```text
+真实密文验证：
+- 是否使用 GPU 路径：
+- 密文格式：
+- 成功模式：
+- 成功 IV 来源：
+- 明文是否 UTF-8 可读：
+- 明文是否符合业务预期：
+```
+
+## 十、注意事项
 
 1. 当前 GPU 脚本是验证版实现，用于采集对比数据，不等同于生产级 GPU 密码库。
 2. 如果 GPU 加速比不明显，需要结合文件 IO、CPU/GPU 数据传输、分块大小和实际 CUDA 实现方式继续分析。
