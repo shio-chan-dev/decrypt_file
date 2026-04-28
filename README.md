@@ -17,9 +17,13 @@ decrypt_file/
   sm4_torch.py            # Torch/CUDA SM4 解密验证实现
 tests/
   test_sm4.py             # 标准库 unittest 自动测试
-sm4_cpu_validation.py     # 生成本地样例并执行 CPU 基线验证
-sm4_gpu_validation.py     # 在 CUDA 服务器执行 CPU/GPU 对比验证
-sm4_gpu_direct_decrypt.py # 在 CUDA 服务器尝试直解外部真实密文
+scripts/
+  validation/
+    sm4_cpu_validation.py       # 生成本地样例并执行 CPU 基线验证
+    sm4_gpu_validation.py       # 在 CUDA 服务器执行 CPU/GPU 对比验证
+  direct_decrypt/
+    sm4_direct_decrypt.py       # 使用 CPU 路径尝试直解外部真实密文
+    sm4_gpu_direct_decrypt.py   # 在 CUDA 服务器尝试直解外部真实密文
 main.py                   # 项目入口提示
 ```
 
@@ -28,14 +32,14 @@ main.py                   # 项目入口提示
 完整测试和报告整理流程见：[SM4 测试与 CPU/GPU 对比教程](docs/SM4测试与对比教程.md)。
 
 ```bash
-python3 sm4_cpu_validation.py
+python3 scripts/validation/sm4_cpu_validation.py
 ```
 
 也可以指定模式和测试文件大小：
 
 ```bash
-python3 sm4_cpu_validation.py --mode CBC --size-mb 10
-python3 sm4_cpu_validation.py --mode CTR --size-mb 10
+python3 scripts/validation/sm4_cpu_validation.py --mode CBC --size-mb 10
+python3 scripts/validation/sm4_cpu_validation.py --mode CTR --size-mb 10
 ```
 
 验证输出文件会生成到 `validation_output/`，该目录已加入 `.gitignore`。
@@ -55,8 +59,8 @@ python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); 
 如果是多卡服务器，先用 `nvidia-smi` 查看显存占用，再通过 `--device cuda:2` 这类参数指定较空闲的 GPU。
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2
-python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2
+python3 scripts/validation/sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2
+python3 scripts/validation/sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2
 ```
 
 脚本会生成同一份测试密文，分别用 CPU 和 GPU 解密，并输出中文字段：
@@ -68,10 +72,10 @@ python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cu
 
 ## 运行真实密文 GPU 直解
 
-如果领导提供了真实密文、SM4 密钥和 IV，可以使用 `sm4_gpu_direct_decrypt.py` 在 CUDA 服务器上尝试解密。该脚本只调用 Torch/CUDA 版 SM4 实现，不使用 CPU 版 `cryptography` 解密函数。
+如果领导提供了真实密文、SM4 密钥和 IV，可以使用 `scripts/direct_decrypt/sm4_gpu_direct_decrypt.py` 在 CUDA 服务器上尝试解密。该脚本只调用 Torch/CUDA 版 SM4 实现，不使用 CPU 版 `cryptography` 解密函数。
 
 ```bash
-python3 sm4_gpu_direct_decrypt.py \
+python3 scripts/direct_decrypt/sm4_gpu_direct_decrypt.py \
   --ciphertext '<完整密文字符串>' \
   --key-hex '<32位hex密钥>' \
   --iv-hex '<32位hex向量>' \

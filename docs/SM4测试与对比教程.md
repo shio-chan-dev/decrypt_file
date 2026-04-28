@@ -4,13 +4,14 @@
 
 ## 一、测试目标
 
-本项目的测试分三类：
+本项目的脚本按用途分为四类：
 
 1. 自动测试：确认核心 SM4 工具函数没有被改坏。
 2. CPU 基线验证：在本机生成样例文件，验证 SM4 解密正确性并记录 CPU 吞吐量。
 3. GPU 对比验证：在 CUDA 服务器上使用同一份密文分别执行 CPU 和 GPU 解密，输出性能对比结果。
+4. 真实密文直解：在 `scripts/direct_decrypt/` 下使用外部密文、密钥和 IV 尝试解密。
 
-建议顺序是：先跑自动测试，再跑 CPU 基线，最后到 GPU 服务器跑 CPU/GPU 对比。
+建议顺序是：先跑自动测试，再跑 CPU 基线，然后到 GPU 服务器跑 CPU/GPU 对比；如果领导提供了真实密文样例，再运行真实密文直解脚本。
 
 ## 二、准备环境
 
@@ -36,7 +37,7 @@ python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); 
 
 输出中需要重点确认：
 
-1. `sys.executable` 与后续运行 `sm4_gpu_validation.py` 使用的是同一个 Python。
+1. `sys.executable` 与后续运行 `scripts/validation/sm4_gpu_validation.py` 使用的是同一个 Python。
 2. `torch.cuda.is_available()` 对应输出为 `True`。
 3. `torch.version.cuda` 与服务器驱动支持的 CUDA 版本兼容。
 4. `torch.cuda.get_device_name(0)` 能输出 GPU 名称。
@@ -100,7 +101,7 @@ OK
 ### 1. 默认运行
 
 ```bash
-python3 sm4_cpu_validation.py
+python3 scripts/validation/sm4_cpu_validation.py
 ```
 
 默认会使用：
@@ -112,8 +113,8 @@ python3 sm4_cpu_validation.py
 ### 2. 指定测试模式和文件大小
 
 ```bash
-python3 sm4_cpu_validation.py --mode CBC --size-mb 100 --output-dir validation_output/cpu_cbc_100m
-python3 sm4_cpu_validation.py --mode CTR --size-mb 100 --output-dir validation_output/cpu_ctr_100m
+python3 scripts/validation/sm4_cpu_validation.py --mode CBC --size-mb 100 --output-dir validation_output/cpu_cbc_100m
+python3 scripts/validation/sm4_cpu_validation.py --mode CTR --size-mb 100 --output-dir validation_output/cpu_ctr_100m
 ```
 
 参数说明：
@@ -155,8 +156,8 @@ GPU 脚本应在 CUDA 服务器上执行。
 先用 10MB 确认脚本和环境能跑通：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 10 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_10m
-python3 sm4_gpu_validation.py --mode CTR --size-mb 10 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_10m
+python3 scripts/validation/sm4_gpu_validation.py --mode CBC --size-mb 10 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_10m
+python3 scripts/validation/sm4_gpu_validation.py --mode CTR --size-mb 10 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_10m
 ```
 
 ### 2. 正式对比测试
@@ -164,15 +165,15 @@ python3 sm4_gpu_validation.py --mode CTR --size-mb 10 --chunk-mb 16 --device cud
 确认小文件跑通后，再增加文件大小：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_100m
-python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_100m
+python3 scripts/validation/sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_100m
+python3 scripts/validation/sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_100m
 ```
 
 如果服务器资源允许，可以继续测试 1GB：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 1024 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_1g
-python3 sm4_gpu_validation.py --mode CTR --size-mb 1024 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_1g
+python3 scripts/validation/sm4_gpu_validation.py --mode CBC --size-mb 1024 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_1g
+python3 scripts/validation/sm4_gpu_validation.py --mode CTR --size-mb 1024 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_1g
 ```
 
 ### 3. GPU 参数说明
@@ -233,20 +234,20 @@ GPU相对CPU加速比：...
 如果时间有限，优先跑：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_100m
-python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_100m
+python3 scripts/validation/sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_100m
+python3 scripts/validation/sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_100m
 ```
 
 ## 八、运行真实密文 GPU 直解
 
-如果领导提供的是一段真实密文、SM4 密钥和 IV，而不是让脚本自动生成测试文件，可以使用 `sm4_gpu_direct_decrypt.py`。
+如果领导提供的是一段真实密文、SM4 密钥和 IV，而不是让脚本自动生成测试文件，可以使用 `scripts/direct_decrypt/sm4_gpu_direct_decrypt.py`。
 
 这个脚本的定位是：在 CUDA 路径上尝试解开外部密文样例，确认真实样例能否被当前 GPU SM4 实现处理。它不会调用 CPU 版 `cryptography` 解密函数。
 
 ### 1. 运行命令
 
 ```bash
-python3 sm4_gpu_direct_decrypt.py \
+python3 scripts/direct_decrypt/sm4_gpu_direct_decrypt.py \
   --ciphertext '<完整密文字符串>' \
   --key-hex '<32位hex密钥>' \
   --iv-hex '<32位hex向量>' \
