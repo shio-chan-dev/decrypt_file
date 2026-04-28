@@ -24,6 +24,8 @@ main.py                   # 项目入口提示
 
 ## 运行验证
 
+完整测试和报告整理流程见：[SM4 测试与 CPU/GPU 对比教程](docs/SM4测试与对比教程.md)。
+
 ```bash
 python3 sm4_cpu_validation.py
 ```
