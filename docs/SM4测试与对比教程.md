@@ -31,14 +31,15 @@ GPU 对比测试需要额外满足：
 在 GPU 服务器上先执行：
 
 ```bash
-python3 -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
 ```
 
 输出中需要重点确认：
 
-1. `torch.cuda.is_available()` 对应输出为 `True`。
-2. `torch.version.cuda` 与服务器驱动支持的 CUDA 版本兼容。
-3. `torch.cuda.get_device_name(0)` 能输出 GPU 名称。
+1. `sys.executable` 与后续运行 `sm4_gpu_validation.py` 使用的是同一个 Python。
+2. `torch.cuda.is_available()` 对应输出为 `True`。
+3. `torch.version.cuda` 与服务器驱动支持的 CUDA 版本兼容。
+4. `torch.cuda.get_device_name(0)` 能输出 GPU 名称。
 
 如果提示缺少 `numpy`，可以先补充安装：
 
@@ -46,7 +47,20 @@ python3 -c "import torch; print(torch.__version__); print(torch.version.cuda); p
 pip install numpy
 ```
 
-如果提示 NVIDIA driver 过旧或 CUDA 不可用，需要升级驱动，或者安装与当前驱动兼容的 PyTorch CUDA 版本。
+如果提示 NVIDIA driver 过旧或 CUDA 不可用，需要升级驱动，或者安装与当前驱动兼容的 PyTorch CUDA 版本。以 Driver 560 / CUDA 12.6 环境为例，如果误装了 CUDA 12.8 或更高版本的 PyTorch，`nvidia-smi` 仍然能看到 GPU，但 `torch.cuda.is_available()` 可能会返回 `False`。
+
+建议先确认当前脚本实际使用的 PyTorch 版本：
+
+```bash
+python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+```
+
+如果 `torch.version.cuda` 高于服务器驱动支持范围，可以在当前虚拟环境里重装匹配版本。CUDA 12.6 环境可参考 PyTorch 官网选择 `cu126`，常用命令如下：
+
+```bash
+python3 -m pip uninstall -y torch torchvision torchaudio
+python3 -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+```
 
 多卡服务器建议先执行：
 

@@ -164,7 +164,9 @@ def cuda_device_name(device: str = "cuda") -> str:
     if torch_device.type != "cuda":
         return str(torch_device)
     if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available")
+        torch_version = getattr(torch, "__version__", "unknown")
+        torch_cuda = getattr(torch.version, "cuda", "unknown")
+        raise RuntimeError(f"CUDA is not available (torch={torch_version}, torch_cuda={torch_cuda})")
     return torch.cuda.get_device_name(torch_device)
 
 

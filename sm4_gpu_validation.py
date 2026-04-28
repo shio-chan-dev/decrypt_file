@@ -54,7 +54,9 @@ def main() -> int:
     except RuntimeError as exc:
         print("GPU环境检查：失败")
         print(f"失败原因：{exc}")
-        print("处理建议：请在已安装 PyTorch 且 CUDA 可用的 GPU 服务器上运行该脚本。")
+        print("处理建议：请确认运行脚本的 python3 和验证 PyTorch 的 python3 是同一个解释器。")
+        print("处理建议：如果日志提示 NVIDIA driver 过旧，请安装与当前驱动兼容的 PyTorch CUDA 版本。")
+        print('排查命令：python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"')
         return 2
 
     paths = build_paths(output_dir)
