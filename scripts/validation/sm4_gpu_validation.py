@@ -20,6 +20,8 @@ from decrypt_file.sm4_torch import cuda_device_name, decrypt_file_torch, synchro
 
 DEFAULT_KEY = b"0123456789abcdef"
 DEFAULT_IV = b"abcdef9876543210"
+SM4_MODE = "CBC"
+SM4_PADDING = "pkcs7"
 
 
 def main() -> int:
@@ -34,11 +36,10 @@ def main() -> int:
 
     Raises:
         RuntimeError: CPU/GPU 解密结果 hash 不一致时抛出。
-        ValueError: 分块大小、加密模式或 SM4 参数不合法时抛出。
+        ValueError: 分块大小或 SM4 参数不合法时抛出。
         OSError: 文件读写失败时由底层文件操作抛出。
     """
     parser = argparse.ArgumentParser(description="Run SM4 CPU/GPU validation on a CUDA machine.")
-    parser.add_argument("--mode", choices=["CBC", "CTR"], default="CBC")
     parser.add_argument("--size-mb", type=int, default=64)
     parser.add_argument("--chunk-mb", type=int, default=16)
     parser.add_argument("--output-dir", default="validation_output/sm4_gpu")
@@ -66,11 +67,11 @@ def main() -> int:
 
     paths = build_paths(output_dir)
     write_sample_file(paths["plain"], args.size_mb)
-    encrypt_file(paths["plain"], paths["cipher"], DEFAULT_KEY, DEFAULT_IV, mode=args.mode)
+    encrypt_file(paths["plain"], paths["cipher"], DEFAULT_KEY, DEFAULT_IV, mode=SM4_MODE, padding=SM4_PADDING)
 
     # CPU/GPU 使用同一份密文，保证耗时和吞吐量可对比。
-    cpu_elapsed = measure_cpu_decrypt(paths, args.mode, chunk_size)
-    gpu_elapsed = measure_gpu_decrypt(paths, args.mode, chunk_size, args.device)
+    cpu_elapsed = measure_cpu_decrypt(paths, chunk_size)
+    gpu_elapsed = measure_gpu_decrypt(paths, chunk_size, args.device)
 
     # hash 同时校验 CPU 解密和 GPU 解密，避免只比较速度不验证正确性。
     plain_hash = sha256_file(paths["plain"])
@@ -86,7 +87,8 @@ def main() -> int:
 
     print("GPU验证：通过")
     print(f"GPU设备：{gpu_name}")
-    print(f"加密模式：SM4-{args.mode}")
+    print(f"加密模式：SM4-{SM4_MODE}")
+    print("CBC填充：PKCS7")
     print(f"测试文件大小(MB)：{args.size_mb}")
     print(f"分块大小(MB)：{args.chunk_mb}")
     print(f"原始文件：{paths['plain']}")
@@ -125,13 +127,12 @@ def build_paths(output_dir: Path) -> dict[str, Path]:
     }
 
 
-def measure_cpu_decrypt(paths: dict[str, Path], mode: str, chunk_size: int) -> float:
+def measure_cpu_decrypt(paths: dict[str, Path], chunk_size: int) -> float:
     """
-    统计 CPU 解密耗时。
+    使用 SM4-CBC/PKCS7 统计 CPU 解密耗时。
 
     Args:
         paths (dict[str, Path]): 验证文件路径集合。
-        mode (str): SM4 模式，支持 CBC 或 CTR。
         chunk_size (int): 文件解密分块大小，单位字节。
 
     Returns:
@@ -139,20 +140,19 @@ def measure_cpu_decrypt(paths: dict[str, Path], mode: str, chunk_size: int) -> f
 
     Raises:
         OSError: 文件读写失败时由底层文件操作抛出。
-        ValueError: mode 或密文数据不合法时由底层函数抛出。
+        ValueError: 密文数据不合法时由底层函数抛出。
     """
     start = time.perf_counter()
-    decrypt_file(paths["cipher"], paths["cpu_decrypted"], DEFAULT_KEY, DEFAULT_IV, mode=mode, chunk_size=chunk_size)
+    decrypt_file(paths["cipher"], paths["cpu_decrypted"], DEFAULT_KEY, DEFAULT_IV, mode=SM4_MODE, padding=SM4_PADDING, chunk_size=chunk_size)
     return time.perf_counter() - start
 
 
-def measure_gpu_decrypt(paths: dict[str, Path], mode: str, chunk_size: int, device: str) -> float:
+def measure_gpu_decrypt(paths: dict[str, Path], chunk_size: int, device: str) -> float:
     """
-    统计 GPU 解密耗时。
+    使用 SM4-CBC/PKCS7 统计 GPU 解密耗时。
 
     Args:
         paths (dict[str, Path]): 验证文件路径集合。
-        mode (str): SM4 模式，支持 CBC 或 CTR。
         chunk_size (int): 文件解密分块大小，单位字节。
         device (str): Torch 设备名称，通常为 cuda。
 
@@ -162,12 +162,12 @@ def measure_gpu_decrypt(paths: dict[str, Path], mode: str, chunk_size: int, devi
     Raises:
         RuntimeError: PyTorch 或 CUDA 不可用时抛出。
         OSError: 文件读写失败时由底层文件操作抛出。
-        ValueError: mode 或密文数据不合法时由底层函数抛出。
+        ValueError: 密文数据不合法时由底层函数抛出。
     """
     # CUDA 调用是异步的，计时前后都需要同步设备。
     synchronize_device(device)
     start = time.perf_counter()
-    decrypt_file_torch(paths["cipher"], paths["gpu_decrypted"], DEFAULT_KEY, DEFAULT_IV, mode=mode, chunk_size=chunk_size, device=device)
+    decrypt_file_torch(paths["cipher"], paths["gpu_decrypted"], DEFAULT_KEY, DEFAULT_IV, mode=SM4_MODE, padding=SM4_PADDING, chunk_size=chunk_size, device=device)
     synchronize_device(device)
     return time.perf_counter() - start
 

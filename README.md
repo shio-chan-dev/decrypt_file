@@ -2,12 +2,12 @@
 
 SM4 文件/字符串解密可行性验证项目。
 
-当前代码先完成 CPU 基线验证，用于确认：
+当前代码用于验证 SM4-CBC + PKCS7 解密方案，并采集 CPU/GPU 对比数据：
 
 1. SM4-CBC/PKCS7 字符串和文件加解密可以正确往返。
-2. SM4-CTR 字符串加解密可以正确往返。
-3. 文件解密后可以通过 sha256 与原文件核对。
-4. 可以记录 CPU 解密耗时和吞吐量，后续用于 CPU/GPU 对比。
+2. 文件解密后可以通过 sha256 与原文件核对。
+3. 可以记录 CPU/GPU 解密耗时、吞吐量和加速比。
+4. 可以把真实加密文件放到 CPU 或 GPU 路径上尝试解密。
 
 ## 项目结构
 
@@ -22,25 +22,28 @@ scripts/
     sm4_cpu_validation.py       # 生成本地样例并执行 CPU 基线验证
     sm4_gpu_validation.py       # 在 CUDA 服务器执行 CPU/GPU 对比验证
   direct_decrypt/
-    sm4_direct_decrypt.py       # 使用 CPU 路径尝试直解外部真实密文
-    sm4_gpu_direct_decrypt.py   # 在 CUDA 服务器尝试直解外部真实密文
+    sm4_direct_decrypt.py       # 使用 CPU 路径解密真实加密文件或排查小字符串
+    sm4_gpu_direct_decrypt.py   # 在 CUDA 服务器解密真实加密文件或排查小字符串
+sm4_decrypt_standalone.py # 可单独分发的 CPU/GPU 解密脚本
 main.py                   # 项目入口提示
 ```
 
 ## 运行验证
 
 完整测试和报告整理流程见：[SM4 测试与 CPU/GPU 对比教程](docs/SM4测试与对比教程.md)。
+真实业务样例复跑步骤见：[SM4 真实业务样例解密教程](docs/SM4真实业务样例解密教程.md)。
 
 ```bash
 python3 scripts/validation/sm4_cpu_validation.py
 ```
 
-也可以指定模式和测试文件大小：
+也可以指定测试文件大小：
 
 ```bash
-python3 scripts/validation/sm4_cpu_validation.py --mode CBC --size-mb 10
-python3 scripts/validation/sm4_cpu_validation.py --mode CTR --size-mb 10
+python3 scripts/validation/sm4_cpu_validation.py --size-mb 10
 ```
+
+脚本固定使用 `SM4-CBC + PKCS7 padding`，不需要传入模式参数。
 
 验证输出文件会生成到 `validation_output/`，该目录已加入 `.gitignore`。
 
@@ -59,8 +62,7 @@ python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); 
 如果是多卡服务器，先用 `nvidia-smi` 查看显存占用，再通过 `--device cuda:2` 这类参数指定较空闲的 GPU。
 
 ```bash
-python3 scripts/validation/sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2
-python3 scripts/validation/sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2
+python3 scripts/validation/sm4_gpu_validation.py --size-mb 100 --chunk-mb 16 --device cuda:2
 ```
 
 脚本会生成同一份测试密文，分别用 CPU 和 GPU 解密，并输出中文字段：
@@ -70,21 +72,44 @@ python3 scripts/validation/sm4_gpu_validation.py --mode CTR --size-mb 100 --chun
 3. GPU 相对 CPU 加速比。
 4. 原始文件、CPU 解密文件、GPU 解密文件的 sha256。
 
-## 运行真实密文 GPU 直解
+## 运行真实加密文件解密
 
-如果领导提供了真实密文、SM4 密钥和 IV，可以使用 `scripts/direct_decrypt/sm4_gpu_direct_decrypt.py` 在 CUDA 服务器上尝试解密。该脚本只调用 Torch/CUDA 版 SM4 实现，不使用 CPU 版 `cryptography` 解密函数。
+如果业务系统提供的是数字信封，例如 `miwen`，需要先按业务系统逻辑打开数字信封，得到真正的 `SM4 key` 和 `IV`。拿到 key/IV 后，再对解包出来的真实加密文件，也就是类似 `encFilePath` 的文件，执行 SM4-CBC/PKCS7 解密。
+
+CPU 路径：
+
+```bash
+python3 scripts/direct_decrypt/sm4_direct_decrypt.py \
+  --input-file '<encFilePath加密文件路径>' \
+  --key-hex '<32位hex密钥>' \
+  --iv-hex '<32位hex向量>' \
+  --output-file validation_output/plain.bin
+```
+
+GPU 路径：
 
 ```bash
 python3 scripts/direct_decrypt/sm4_gpu_direct_decrypt.py \
-  --ciphertext '<完整密文字符串>' \
+  --input-file '<encFilePath加密文件路径>' \
   --key-hex '<32位hex密钥>' \
   --iv-hex '<32位hex向量>' \
-  --mode AUTO \
   --device cuda:2 \
-  --output-file validation_output/direct_plain.bin
+  --output-file validation_output/plain.bin
 ```
 
-`--mode AUTO` 会同时尝试 CBC 和 CTR。脚本会自动识别整体密文、`|` 分段、base64、hex，以及 ASN.1/DER 封装里的候选密文字段和 IV。
+脚本固定按 `SM4-CBC + PKCS7 padding` 解密。`--ciphertext` 参数仍保留用于小字符串排查，但数字信封本身通常不是最终要解密的 SM4 文件密文。
+
+如果只想拷贝一个脚本到服务器，可以使用单文件版本：
+
+```bash
+python3 sm4_decrypt_standalone.py \
+  --input-file '<encFilePath加密文件路径>' \
+  --key-hex '<32位hex密钥>' \
+  --iv-hex '<32位hex向量>' \
+  --backend gpu \
+  --device cuda:2 \
+  --output-file validation_output/plain.bin
+```
 
 ## 运行测试
 

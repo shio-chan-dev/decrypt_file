@@ -1,7 +1,8 @@
 """SM4 直接解密测试脚本。
 
-该脚本用于验证外部提供的密文、密钥和 IV 是否能直接按 SM4 解密。
-它不会生成样例数据，只会基于命令行传入的真实样例做尝试，并输出中文结果。
+该脚本用于验证外部提供的真实加密文件或小段密文、密钥和 IV 是否能按
+SM4-CBC/PKCS7 解密。它不会生成样例数据，只会基于命令行传入的真实样例
+做尝试，并输出中文结果。
 """
 
 from __future__ import annotations
@@ -16,7 +17,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from decrypt_file import decrypt_bytes
+from decrypt_file import decrypt_bytes, decrypt_file, sha256_file
+
+SM4_MODE = "CBC"
+SM4_PADDING = "pkcs7"
 
 
 @dataclass(frozen=True)
@@ -40,12 +44,13 @@ def main() -> int:
     Raises:
         ValueError: 密钥或 IV 不是合法十六进制，或者长度不符合 SM4 要求时抛出。
     """
-    parser = argparse.ArgumentParser(description="Directly test SM4 decryption with provided ciphertext/key/IV.")
-    parser.add_argument("--ciphertext", required=True, help="密文字符串，按整体输入，不自动按业务字段拆分")
+    parser = argparse.ArgumentParser(description="Directly test SM4-CBC/PKCS7 decryption with provided key/IV.")
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("--ciphertext", help="密文字符串，按整体输入，不自动按业务字段拆分")
+    input_group.add_argument("--input-file", help="真正的加密文件路径，对应业务解包后的 encFilePath")
     parser.add_argument("--key-hex", required=True, help="16 字节 SM4 密钥，hex 格式")
     parser.add_argument("--iv-hex", required=True, help="16 字节 SM4 IV/初始向量，hex 格式")
-    parser.add_argument("--mode", choices=["AUTO", "CBC", "CTR"], default="AUTO", help="SM4 模式，默认自动尝试 CBC 和 CTR")
-    parser.add_argument("--output-file", help="如果有可读解密结果，将最后一个成功结果写入该文件")
+    parser.add_argument("--output-file", help="文件解密输出路径；字符串模式下如果有可读结果，也会写入该文件")
     args = parser.parse_args()
 
     key = bytes.fromhex(args.key_hex)
@@ -55,15 +60,21 @@ def main() -> int:
     if len(iv) != 16:
         raise ValueError("SM4 IV 必须是 16 字节，也就是 32 位 hex 字符")
 
+    if args.input_file:
+        if not args.output_file:
+            raise ValueError("使用 --input-file 解密文件时必须提供 --output-file")
+        run_file_decrypt(args.input_file, args.output_file, key, iv)
+        return 0
+
     candidates = build_cipher_candidates(args.ciphertext)
-    modes = ["CBC", "CTR"] if args.mode == "AUTO" else [args.mode]
     last_success: bytes | None = None
 
     print("SM4直接解密测试：开始")
     print(f"输入密文字符数：{len(args.ciphertext)}")
     print(f"密钥长度(bytes)：{len(key)}")
     print(f"向量长度(bytes)：{len(iv)}")
-    print(f"测试模式：{','.join(modes)}")
+    print(f"测试模式：SM4-{SM4_MODE}")
+    print("CBC填充：PKCS7")
 
     for candidate in candidates:
         print("")
@@ -71,11 +82,10 @@ def main() -> int:
         print(f"密文字节长度：{len(candidate.data)}")
         print(f"是否16字节对齐：{'是' if len(candidate.data) % 16 == 0 else '否'}")
 
-        for mode in modes:
-            result = try_decrypt(candidate.data, key, iv, mode)
-            print_result(mode, result)
-            if result is not None:
-                last_success = result
+        result = try_decrypt(candidate.data, key, iv)
+        print_result(result)
+        if result is not None:
+            last_success = result
 
     if args.output_file and last_success is not None:
         with open(args.output_file, "wb") as target:
@@ -86,6 +96,40 @@ def main() -> int:
     print("")
     print("SM4直接解密测试：结束")
     return 0
+
+
+def run_file_decrypt(input_file: str, output_file: str, key: bytes, iv: bytes) -> None:
+    """
+    使用 SM4-CBC/PKCS7 解密真实加密文件。
+
+    Args:
+        input_file (str): 业务解包后得到的加密文件路径。
+        output_file (str): 解密后的明文文件输出路径。
+        key (bytes): 16 字节 SM4 密钥。
+        iv (bytes): 16 字节 SM4 IV。
+
+    Returns:
+        None: 解密结果直接写入 output_file。
+
+    Raises:
+        OSError: 文件读写失败时由底层文件操作抛出。
+        ValueError: 密文、key、IV 或 padding 不合法时由底层函数抛出。
+    """
+    input_path = Path(input_file)
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    print("SM4文件解密：开始")
+    print(f"输入文件：{input_path}")
+    print(f"输出文件：{output_path}")
+    print(f"解密模式：SM4-{SM4_MODE}")
+    print("CBC填充：PKCS7")
+
+    decrypt_file(input_path, output_path, key, iv, mode=SM4_MODE, padding=SM4_PADDING)
+
+    print("解密状态：成功")
+    print(f"输出文件sha256：{sha256_file(output_path)}")
+    print("SM4文件解密：结束")
 
 
 def build_cipher_candidates(ciphertext: str) -> list[CipherCandidate]:
@@ -121,15 +165,14 @@ def build_cipher_candidates(ciphertext: str) -> list[CipherCandidate]:
     return candidates
 
 
-def try_decrypt(ciphertext: bytes, key: bytes, iv: bytes, mode: str) -> bytes | None:
+def try_decrypt(ciphertext: bytes, key: bytes, iv: bytes) -> bytes | None:
     """
-    使用指定 SM4 模式尝试解密。
+    使用 SM4-CBC/PKCS7 尝试解密。
 
     Args:
         ciphertext (bytes): 待解密密文字节。
         key (bytes): 16 字节 SM4 密钥。
         iv (bytes): 16 字节 SM4 IV/初始向量。
-        mode (str): SM4 模式，CBC 或 CTR。
 
     Returns:
         bytes | None: 解密成功返回明文字节，失败返回 None。
@@ -138,21 +181,19 @@ def try_decrypt(ciphertext: bytes, key: bytes, iv: bytes, mode: str) -> bytes | 
         None: 解密异常会被捕获并转换为中文输出。
     """
     try:
-        padding = "pkcs7" if mode == "CBC" else "none"
-        return decrypt_bytes(ciphertext, key, iv, mode=mode, padding=padding)
+        return decrypt_bytes(ciphertext, key, iv, mode=SM4_MODE, padding=SM4_PADDING)
     except Exception as exc:
-        print(f"解密模式：SM4-{mode}")
+        print(f"解密模式：SM4-{SM4_MODE}")
         print("解密状态：失败")
         print(f"失败原因：{type(exc).__name__}: {exc}")
         return None
 
 
-def print_result(mode: str, plaintext: bytes | None) -> None:
+def print_result(plaintext: bytes | None) -> None:
     """
     打印一次解密尝试结果。
 
     Args:
-        mode (str): SM4 模式，CBC 或 CTR。
         plaintext (bytes | None): 解密得到的明文字节，失败时为 None。
 
     Returns:
@@ -164,7 +205,7 @@ def print_result(mode: str, plaintext: bytes | None) -> None:
     if plaintext is None:
         return
 
-    print(f"解密模式：SM4-{mode}")
+    print(f"解密模式：SM4-{SM4_MODE}")
     print("解密状态：算法执行成功")
     print(f"明文长度(bytes)：{len(plaintext)}")
     print(f"明文hex预览：{plaintext[:128].hex()}")
