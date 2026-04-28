@@ -24,6 +24,7 @@ venv/
 validation_input/
 validation_output/
 samples/local/
+test_files/
 
 # Editor and OS files
 .DS_Store

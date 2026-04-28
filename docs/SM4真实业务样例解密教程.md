@@ -1,13 +1,15 @@
 # SM4 真实业务样例解密教程
 
-本文记录 `/home/gong/date/2026/apr/week5/28,Tue/加密测试文件` 下这组真实测试样例的使用方式。该样例用于验证业务文件的 `SM4-CBC + PKCS7` 文件流解密，以及后续 CPU/GPU 对比。
+本文记录项目本地 `test_files/` 下这组真实测试样例的使用方式。该样例用于验证业务文件的 `SM4-CBC + PKCS7` 文件流解密，以及后续 CPU/GPU 对比。
+
+`test_files/` 已加入 `.gitignore`，用于存放本地真实测试材料、解包结果和解密输出，不会被提交到仓库。
 
 ## 一、样例材料
 
 原始材料目录：
 
 ```text
-/home/gong/date/2026/apr/week5/28,Tue/加密测试文件
+test_files/raw
 ```
 
 目录中包含：
@@ -28,7 +30,7 @@ aecff4a407da400bb40ff1fc6b2e39d5.utczip
 当前样例已经解包到：
 
 ```text
-/home/gong/date/2026/apr/week5/28,Tue/加密测试文件/解包结果
+test_files/extracted
 ```
 
 解包后关键文件：
@@ -64,10 +66,10 @@ SM4 key：
 
 ```bash
 python3 scripts/direct_decrypt/sm4_direct_decrypt.py \
-  --input-file /home/gong/date/2026/apr/week5/28,Tue/加密测试文件/解包结果/utctmp \
+  --input-file test_files/extracted/utctmp \
   --key-hex 1b9ad1730769af291da0ff795f411696 \
   --iv-hex 360108a8cf3016d6d720ec7dd1f8fd1e \
-  --output-file validation_output/real_plain_cpu.bin
+  --output-file test_files/output/real_plain_cpu.bin
 ```
 
 已验证输出：
@@ -80,7 +82,7 @@ python3 scripts/direct_decrypt/sm4_direct_decrypt.py \
 如果输出文件存在，可以确认文件类型：
 
 ```bash
-file validation_output/real_plain_cpu.bin
+file test_files/output/real_plain_cpu.bin
 ```
 
 本次验证结果：
@@ -103,29 +105,29 @@ python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); 
 
 ```bash
 python3 sm4_decrypt_standalone.py \
-  --input-file /home/gong/date/2026/apr/week5/28,Tue/加密测试文件/解包结果/utctmp \
+  --input-file test_files/extracted/utctmp \
   --key-hex 1b9ad1730769af291da0ff795f411696 \
   --iv-hex 360108a8cf3016d6d720ec7dd1f8fd1e \
   --backend gpu \
   --device cuda:2 \
-  --output-file validation_output/real_plain_gpu.bin
+  --output-file test_files/output/real_plain_gpu.bin
 ```
 
 如果只想使用项目内 GPU 脚本，也可以执行：
 
 ```bash
 python3 scripts/direct_decrypt/sm4_gpu_direct_decrypt.py \
-  --input-file /home/gong/date/2026/apr/week5/28,Tue/加密测试文件/解包结果/utctmp \
+  --input-file test_files/extracted/utctmp \
   --key-hex 1b9ad1730769af291da0ff795f411696 \
   --iv-hex 360108a8cf3016d6d720ec7dd1f8fd1e \
   --device cuda:2 \
-  --output-file validation_output/real_plain_gpu.bin
+  --output-file test_files/output/real_plain_gpu.bin
 ```
 
 GPU 输出文件应与 CPU 输出文件 hash 一致：
 
 ```bash
-sha256sum validation_output/real_plain_cpu.bin validation_output/real_plain_gpu.bin
+sha256sum test_files/output/real_plain_cpu.bin test_files/output/real_plain_gpu.bin
 ```
 
 ## 六、流程理解
