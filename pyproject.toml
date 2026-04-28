@@ -1,0 +1,9 @@
+[project]
+name = "decrypt-file"
+version = "0.1.0"
+description = "SM4 validation utilities for decrypt-file feasibility checks"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "cryptography>=41.0.0,<45.0.0",
+]
