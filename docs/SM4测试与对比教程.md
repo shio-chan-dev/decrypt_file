@@ -31,10 +31,30 @@ GPU 对比测试需要额外满足：
 在 GPU 服务器上先执行：
 
 ```bash
-python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+python3 -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
 ```
 
-如果第一行输出 `True`，说明 PyTorch 可以识别 CUDA。
+输出中需要重点确认：
+
+1. `torch.cuda.is_available()` 对应输出为 `True`。
+2. `torch.version.cuda` 与服务器驱动支持的 CUDA 版本兼容。
+3. `torch.cuda.get_device_name(0)` 能输出 GPU 名称。
+
+如果提示缺少 `numpy`，可以先补充安装：
+
+```bash
+pip install numpy
+```
+
+如果提示 NVIDIA driver 过旧或 CUDA 不可用，需要升级驱动，或者安装与当前驱动兼容的 PyTorch CUDA 版本。
+
+多卡服务器建议先执行：
+
+```bash
+nvidia-smi
+```
+
+根据显存占用选择较空闲的 GPU。例如 GPU 0、1 已被占用较多，而 GPU 2 相对空闲，则后续命令使用 `--device cuda:2`。
 
 ## 三、运行自动测试
 
@@ -121,8 +141,8 @@ GPU 脚本应在 CUDA 服务器上执行。
 先用 10MB 确认脚本和环境能跑通：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 10 --chunk-mb 16 --output-dir validation_output/gpu_cbc_10m
-python3 sm4_gpu_validation.py --mode CTR --size-mb 10 --chunk-mb 16 --output-dir validation_output/gpu_ctr_10m
+python3 sm4_gpu_validation.py --mode CBC --size-mb 10 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_10m
+python3 sm4_gpu_validation.py --mode CTR --size-mb 10 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_10m
 ```
 
 ### 2. 正式对比测试
@@ -130,15 +150,15 @@ python3 sm4_gpu_validation.py --mode CTR --size-mb 10 --chunk-mb 16 --output-dir
 确认小文件跑通后，再增加文件大小：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --output-dir validation_output/gpu_cbc_100m
-python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --output-dir validation_output/gpu_ctr_100m
+python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_100m
+python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_100m
 ```
 
 如果服务器资源允许，可以继续测试 1GB：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 1024 --chunk-mb 16 --output-dir validation_output/gpu_cbc_1g
-python3 sm4_gpu_validation.py --mode CTR --size-mb 1024 --chunk-mb 16 --output-dir validation_output/gpu_ctr_1g
+python3 sm4_gpu_validation.py --mode CBC --size-mb 1024 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_1g
+python3 sm4_gpu_validation.py --mode CTR --size-mb 1024 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_1g
 ```
 
 ### 3. GPU 参数说明
@@ -147,7 +167,7 @@ python3 sm4_gpu_validation.py --mode CTR --size-mb 1024 --chunk-mb 16 --output-d
 2. `--size-mb`：自动生成的测试文件大小，单位 MB。
 3. `--chunk-mb`：每次读取并送入 CPU/GPU 解密的分块大小，单位 MB。
 4. `--output-dir`：测试文件输出目录。
-5. `--device`：Torch 设备，默认是 `cuda`。
+5. `--device`：Torch 设备，默认是 `cuda`；多卡机器可以指定 `cuda:0`、`cuda:1`、`cuda:2` 等。
 
 `--size-mb` 越大，越接近真实大文件场景；`--chunk-mb` 会影响文件 IO、CPU/GPU 数据传输和显存占用。
 
@@ -199,8 +219,8 @@ GPU相对CPU加速比：...
 如果时间有限，优先跑：
 
 ```bash
-python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --output-dir validation_output/gpu_cbc_100m
-python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --output-dir validation_output/gpu_ctr_100m
+python3 sm4_gpu_validation.py --mode CBC --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_cbc_100m
+python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --device cuda:2 --output-dir validation_output/gpu_ctr_100m
 ```
 
 ## 八、如何写报告结论
@@ -247,5 +267,6 @@ python3 sm4_gpu_validation.py --mode CTR --size-mb 100 --chunk-mb 16 --output-di
 
 1. 当前 GPU 脚本是验证版实现，用于采集对比数据，不等同于生产级 GPU 密码库。
 2. 如果 GPU 加速比不明显，需要结合文件 IO、CPU/GPU 数据传输、分块大小和实际 CUDA 实现方式继续分析。
-3. `validation_output/` 已加入 `.gitignore`，本地生成的测试文件不会被提交。
-4. 如果要验证真实业务数据，建议使用脱敏样例，不要直接使用生产密钥和敏感文件。
+3. 如果默认 `cuda` 设备显存占用较高，可以通过 `--device cuda:2` 指定其他 GPU。
+4. `validation_output/` 已加入 `.gitignore`，本地生成的测试文件不会被提交。
+5. 如果要验证真实业务数据，建议使用脱敏样例，不要直接使用生产密钥和敏感文件。
