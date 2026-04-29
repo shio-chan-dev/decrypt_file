@@ -60,11 +60,11 @@ pip install numpy
 python3 -c "import sys, torch; print(sys.executable); print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
 ```
 
-如果 `torch.version.cuda` 高于服务器驱动支持范围，可以在当前虚拟环境里重装匹配版本。CUDA 12.6 环境可参考 PyTorch 官网选择 `cu126`，常用命令如下：
+如果 `torch.version.cuda` 高于服务器驱动支持范围，可以在当前 uv 虚拟环境里重装匹配版本。本项目已将 GPU 可选依赖中的 `torch` 固定到 PyTorch `cu126` 源，常用命令如下：
 
 ```bash
-python3 -m pip uninstall -y torch torchvision torchaudio
-python3 -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+uv sync --extra gpu
+uv run python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
 ```
 
 多卡服务器建议先执行：
