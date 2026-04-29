@@ -46,6 +46,25 @@ json
 2. `json` 是元数据文件，包含 `sign1`、`sign2`、`miwen`。
 3. `miwen` 是数字信封，用于获取 IV 和 SM4 key，不是要直接 SM4 解密的文件密文。
 
+如果需要重新观察或导出当前样例，可以使用项目内的观察性解包脚本：
+
+```bash
+python3 scripts/direct_decrypt/utczip_extract.py \
+  test_files/raw/aecff4a407da400bb40ff1fc6b2e39d5.utczip \
+  --list-only
+```
+
+确认分段后再写出文件：
+
+```bash
+python3 scripts/direct_decrypt/utczip_extract.py \
+  test_files/raw/aecff4a407da400bb40ff1fc6b2e39d5.utczip \
+  --output-dir test_files/extracted \
+  --overwrite
+```
+
+该脚本只是按当前样例观察到的 `UTES/UESF_A/UESF_B` 结构拆出文件段，不负责验签、打开数字信封或 SM4 解密。正式业务流程仍应优先使用公司解包工具或 Java 里的 `LargeFileUtil.extractAllFiles`。
+
 ## 三、本次验证参数
 
 本次测试样例已确认可以使用以下参数解密 `utctmp`：
