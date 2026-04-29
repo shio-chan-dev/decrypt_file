@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -168,9 +169,18 @@ def run_file_decrypt(input_file: str, output_file: str, key: bytes, iv: bytes, d
     print("CBC填充：PKCS7")
     print(f"分块大小(MB)：{chunk_mb}")
 
+    bytes_decrypted = input_path.stat().st_size
+    synchronize_device(device)
+    start = time.perf_counter()
     decrypt_file_torch(input_path, output_path, key, iv, mode=SM4_MODE, padding=SM4_PADDING, chunk_size=chunk_size, device=device)
+    synchronize_device(device)
+    elapsed = time.perf_counter() - start
+    throughput = bytes_decrypted / elapsed / 1024 / 1024 if elapsed else 0.0
 
     print("解密状态：成功")
+    print(f"输入文件大小(MB)：{bytes_decrypted / 1024 / 1024:.2f}")
+    print(f"解密耗时(秒)：{elapsed:.6f}")
+    print(f"解密吞吐量(MB/s)：{throughput:.2f}")
     print(f"输出文件sha256：{sha256_file(output_path)}")
     print("SM4 GPU文件解密：结束")
 
